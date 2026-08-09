@@ -2,17 +2,22 @@ name: Sync Fork
 
 on:
   schedule:
-    - cron: '0 0 * * *' # 每天国际标准时间 0:00 (北京时间早上 8:00) 自动触发
-  workflow_dispatch: # 允许你在 Actions 页面手动点击按钮触发
+    - cron: '0 0 * * *' # 每天国际标准时间 0:00 自动触发
+  workflow_dispatch: # 允许手动点击触发
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      # 第一步：必须先签出你自己的本地仓库（该插件的必需前置步骤）
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+
+      # 第二步：运行修正名称后的同步插件
       - name: Sync upstream changes
-        uses: aormsby/Fork-Sync-Action@v3.4
+        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
         with:
           target_sync_branch: main     # 你自己仓库需要同步的分支名
           target_repo_token: ${{ secrets.GITHUB_TOKEN }} # 自动调用免密口令
           upstream_sync_branch: main   # 原作者上游仓库的分支名
-          upstream_sync_repo: cloud-mail # 💡 记得修改成原作者的 "用户名/仓库名"
+          upstream_sync_repo: maillab/cloud-mail # 💡 记得修改成原作者的 "用户名/仓库名"
