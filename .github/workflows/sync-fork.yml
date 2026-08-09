@@ -15,7 +15,7 @@ jobs:
 
       # 第二步：运行修正名称后的同步插件
       - name: Sync upstream changes
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
+        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.3
         with:
           target_sync_branch: main     # 你自己仓库需要同步的分支名
           target_repo_token: ${{ secrets.GITHUB_TOKEN }} # 自动调用免密口令
