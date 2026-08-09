@@ -9,11 +9,24 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      # 第一步：必须先签出你自己的本地仓库（该插件的必需前置步骤）
       - name: Checkout target repo
         uses: actions/checkout@v4
-
-      # 第二步：运行修正名称后的同步插件
+        
+      - name: Sync upstream changes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.repos.mergeUpstream({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: 'main' # 💡 如果你自己的分支不是 main，请修改这里
+              });
+              console.log('同步成功！');
+            } catch (error) {
+              console.log('同步失败或暂无新更新：', error.message);
+            }
+            
       - name: Sync upstream changes
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.3
         with:
