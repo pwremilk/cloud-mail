@@ -1,0 +1,90 @@
+# Sync upstream maillab/cloud-mail into this fork.
+# Self-preserving: before hard-resetting to upstream, harvest this directory's
+# fork-only workflow files and restore them afterwards, so sync.yml can never
+# delete itself. Files that exist upstream always keep the upstream version.
+name: sync-upstream
+on:
+  schedule:
+    # twice a day, off the top of the hour to dodge schedule congestion
+    - cron: '23 3,15 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  workflows: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Sync with upstream
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream https://github.com/maillab/cloud-mail || true
+          git fetch --depth=50 upstream main
+          UP=$(git rev-parse FETCH_HEAD)
+          HERE=$(git rev-parse HEAD)
+
+          # 1) harvest fork-owned workflow files before any reset
+          KEEP=/tmp/keep-workflows
+          rm -rf "$KEEP"; mkdir -p "$KEEP"
+          if [ -d .github/workflows ]; then cp -a .github/workflows/. "$KEEP/"; fi
+
+          if [ "$UP" != "$HERE" ]; then
+            echo "syncing $HERE -> $UP"
+            git reset --hard "$UP"
+            git push --force-with-lease=main:"$HERE" origin main
+          else
+            echo "upstream unchanged"
+          fi
+
+          # 2) restore fork-owned workflow files missing from upstream tree.
+          #    Only files ABSENT after reset are restored; files that exist
+          #    upstream always keep the upstream version (no clobbering).
+          CHANGED=0
+          mkdir -p .github/workflows
+          for f in "$KEEP"/*; do
+            [ -e "$f" ] || continue
+            b=$(basename "$f")
+            if [ ! -e ".github/workflows/$b" ]; then
+              cp -a "$f" ".github/workflows/$b"
+              CHANGED=1
+              echo "restored: $b"
+            fi
+          done
+          if [ "$CHANGED" = "1" ]; then
+            git add -A .github/workflows
+            git commit -m "chore(sync): preserve fork-owned workflows [skip ci]"
+            git push origin main
+          fi
+
+      - name: Keepalive against 60-day schedule auto-disable
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # GitHub auto-disables schedules after 60 days without commits.
+          # Touch a timestamp if the newest commit is older than 40 days.
+          LAST=$(git log -1 --format=%ct origin/main)
+          NOW=$(date +%s)
+          if [ $(( (NOW - LAST) / 86400 )) -ge 40 ]; then
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > .sync-keepalive
+            git add .sync-keepalive
+            git commit -m "chore: sync keepalive [skip ci]"
+            git push origin main
+            echo "keepalive commit pushed"
+          else
+            echo "repo fresh enough, no keepalive needed"
+          fi
