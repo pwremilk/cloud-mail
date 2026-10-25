@@ -1,9 +1,11 @@
 # Track upstream maillab/cloud-mail via MERGE (not reset).
 # Merge keeps fork-only files and lets upstream win conflicts (-X theirs).
 # NOTE 2026-10-25: upstream may itself change files under .github/workflows
-# (e.g. deploy-cloudflare.yml), so the pushed merge DOES touch workflows =>
-# `workflows: write` permission below is REQUIRED, or the push is rejected
-# ("refusing to allow a GitHub App to create or update workflow ...").
+# (e.g. deploy-cloudflare.yml). GITHUB_TOKEN can NEVER push workflow files
+# (GitHub hard limitation; there is no `workflows` permissions key). Strategy:
+# merge everything, then HOLD BACK workflow-file changes (fork copy stays),
+# push succeeds, and the run goes RED with a held-files list => a human
+# applies the upstream workflow diff once; next syncs stay green.
 name: sync-upstream
 on:
   schedule:
@@ -13,7 +15,6 @@ on:
 
 permissions:
   contents: write
-  workflows: write
 
 concurrency:
   group: sync-upstream
@@ -49,8 +50,27 @@ jobs:
           echo "merging upstream $UP into $HERE"
           # upstream wins any conflict; this fork's own extra files survive
           git merge --no-edit -X theirs -m "sync: merge upstream $UP" "$UP"
+
+          # GITHUB_TOKEN cannot touch .github/workflows => hold those files back
+          WF_HELD=$(git diff --name-only ORIG_HEAD HEAD -- .github/workflows/ || true)
+          if [ -n "$WF_HELD" ]; then
+            git checkout ORIG_HEAD -- .github/workflows/
+            git commit -m "sync: hold upstream workflow-file changes (needs human apply)"
+            {
+              echo "## Upstream workflow-file changes held back"
+              echo '```'
+              echo "$WF_HELD"
+              echo '```'
+              echo "Fork versions kept; push succeeded. A human must apply the upstream diff once, then this red flag disappears."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
           git push origin "HEAD:main"
           echo "merged and pushed"
+
+          if [ -n "$WF_HELD" ]; then
+            echo "::error::upstream changed workflow files and they were HELD BACK (fork version kept): $(echo $WF_HELD) - human: apply upstream diff manually, then this red flag disappears"
+            exit 1
+          fi
 
       - name: Keepalive against 60-day schedule auto-disable
         run: |
