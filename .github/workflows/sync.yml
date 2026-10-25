@@ -1,19 +1,19 @@
 # Track upstream maillab/cloud-mail via MERGE (not reset).
-# Why merge: GITHUB_TOKEN (GitHub App) is not allowed to create/update files
-# under .github/workflows, so a hard-reset + re-create approach can never
-# restore this workflow on its own. With a merge, this fork-only file is
-# preserved automatically by git (upstream has no such file => no conflict),
-# upstream-owned files always win conflicts (-X theirs), and nothing ever
-# writes to .github/workflows => this workflow can never be deleted by syncing.
+# Merge keeps fork-only files and lets upstream win conflicts (-X theirs).
+# NOTE 2026-10-25: upstream may itself change files under .github/workflows
+# (e.g. deploy-cloudflare.yml), so the pushed merge DOES touch workflows =>
+# `workflows: write` permission below is REQUIRED, or the push is rejected
+# ("refusing to allow a GitHub App to create or update workflow ...").
 name: sync-upstream
 on:
   schedule:
-    # twice a day, off the top of the hour to dodge schedule congestion
+    # twice a day off the top of the hour to dodge schedule congestion
     - cron: '23 3,15 * * *'
   workflow_dispatch: {}
 
 permissions:
   contents: write
+  workflows: write
 
 concurrency:
   group: sync-upstream
